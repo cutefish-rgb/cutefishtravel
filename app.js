@@ -419,6 +419,7 @@ function renderCalendar(data) {
     const iso = localDateKey(date);
     const holiday = holidayName(iso);
     const classes = [
+      iso === localDateKey(today) ? "today-day" : "",
       tripDates.has(iso) ? "trip-day" : "",
       holiday ? "holiday-day" : "",
       date.getDay() === 0 ? "sunday-day" : "",
