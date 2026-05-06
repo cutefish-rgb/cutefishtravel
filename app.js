@@ -226,6 +226,7 @@ function sanitizeData(data) {
     checklist: [],
     mapUrl: "",
     coverImage: "",
+    currentWeather: null,
     participants: [],
     review: "",
     gatherTime: "",
@@ -547,6 +548,7 @@ function renderTrips(data) {
           <span class="tag status-tag status-${trip.status || "planning"}">${tripStatusText(trip.status)}</span>
           <h3>${trip.title}</h3>
           <p>${trip.location}</p>
+          ${currentWeatherSnippet(trip)}
         </div>
         <div class="tag-list">
           <span class="tag">總費用 ${money(total)}</span>
@@ -555,6 +557,7 @@ function renderTrips(data) {
         </div>
         <div class="card-actions">
           <button type="button" data-trip="${trip.id}">查看詳情</button>
+          ${currentWeatherButton(trip)}
           ${trip.mapUrl ? `<a href="${trip.mapUrl}" target="_blank" rel="noreferrer">Google Map</a>` : ""}
           <button class="admin-only" type="button" data-edit-trip="${trip.id}">編輯</button>
           <button class="admin-only" type="button" data-delete-trip="${trip.id}">刪除</button>
@@ -575,6 +578,19 @@ function openTripFromHash() {
   if (id) showTrip(id);
 }
 
+function openRecommendationFromHash() {
+  const match = location.hash.match(/^#rec-(hotels|restaurants)-(.+)$/);
+  if (!match) return;
+  const [, type, id] = match;
+  renderRecommendation(type);
+  requestAnimationFrame(() => {
+    const card = document.getElementById(`rec-${type}-${id}`);
+    card?.scrollIntoView({ behavior: "smooth", block: "center" });
+    card?.classList.add("highlight-card");
+    setTimeout(() => card?.classList.remove("highlight-card"), 1800);
+  });
+}
+
 function showTrip(id) {
   const data = loadData();
   const trip = data.trips.find((item) => item.id === id);
@@ -582,7 +598,9 @@ function showTrip(id) {
   const totals = categoryTotals(trip.costs);
   const total = totalCost(trip.costs);
   const aa = total / Math.max(1, Number(trip.attendees) || 1);
-  document.getElementById("tripDetail").innerHTML = `
+  const detail = document.getElementById("tripDetail");
+  detail.dataset.tripId = id;
+  detail.innerHTML = `
     <h2>${trip.title}</h2>
     <p><span class="tag status-tag status-${trip.status || "planning"}">${tripStatusText(trip.status)}</span></p>
     <p><strong>${dateText(trip.startDate, trip.endDate)}</strong>｜${trip.location}</p>
@@ -594,6 +612,7 @@ function showTrip(id) {
       <button type="button" data-copy-trip="${trip.id}">複製行程摘要</button>
       <button type="button" data-line-trip="${trip.id}">複製 LINE 公告</button>
       <button type="button" data-print-trip="${trip.id}">匯出 PDF</button>
+      ${currentWeatherButton(trip)}
       ${trip.mapUrl ? `<a href="${trip.mapUrl}" target="_blank" rel="noreferrer">Google Map 導航</a>` : ""}
     </div>
     <section class="trip-qr-panel">
@@ -604,6 +623,7 @@ function showTrip(id) {
       <img src="${tripQrUrl(trip.id)}" alt="${escapeAttr(trip.title)} QR Code" />
     </section>
     <p class="form-note" id="tripCopyNote"></p>
+    ${currentWeatherPanel(trip)}
     <div class="detail-grid">
       ${detailBlock("集合資訊", gatheringText(trip))}
       ${detailBlock("交通", trip.transport)}
@@ -764,6 +784,7 @@ function openTripForm(id) {
     mapUrl: "",
     coverImage: "",
     status: "planning",
+    currentWeather: null,
     transport: "",
     hotel: "",
     attractions: "",
@@ -885,6 +906,7 @@ function escapeAttr(value) {
 function saveTripForm(form, id) {
   const data = loadData();
   const formData = new FormData(form);
+  const existingTrip = data.trips.find((item) => item.id === id);
   const trip = {
     id,
     title: formData.get("title").trim(),
@@ -892,6 +914,7 @@ function saveTripForm(form, id) {
     mapUrl: formData.get("mapUrl").trim(),
     coverImage: formData.get("coverImage").trim(),
     status: formData.get("status") || "planning",
+    currentWeather: existingTrip?.currentWeather || null,
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate") || formData.get("startDate"),
     attendees: Number(formData.get("attendees")) || 1,
@@ -988,6 +1011,115 @@ function tripSummaryText(trip) {
   ].filter(Boolean).join("\n");
 }
 
+function recommendationQrUrl(type, id) {
+  const url = new URL(location.href);
+  url.hash = `rec-${type}-${id}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url.toString())}`;
+}
+
+function recommendationSharePanel(type, item) {
+  if (!["hotels", "restaurants"].includes(type)) return "";
+  return `
+    <section class="recommend-qr-panel">
+      <div>
+        <strong>分享本推薦</strong>
+        <p>手機掃描可開啟這筆推薦。</p>
+      </div>
+      <img src="${recommendationQrUrl(type, item.id)}" alt="${escapeAttr(item.name)} QR Code" />
+    </section>`;
+}
+
+function recommendationSummaryText(type, item) {
+  if (type === "hotels") {
+    return [
+      `【飯店推薦】${item.name}`,
+      `城市：${item.city || "尚未填寫"}`,
+      `地址：${item.address || "尚未填寫"}`,
+      item.mapUrl ? `Google Map：${item.mapUrl}` : "",
+      `價位：${ratingText(item.price)}`,
+      `舒適度：${ratingText(item.comfort)}`,
+      `早餐：${ratingText(item.breakfast)}`,
+      `地點：${ratingText(item.location)}`,
+      item.note ? `備註：${item.note}` : ""
+    ].filter(Boolean).join("\n");
+  }
+  return [
+    `【蔬食餐廳推薦】${item.name}`,
+    `城市：${item.city || "尚未填寫"}`,
+    `地址：${item.address || "尚未填寫"}`,
+    item.mapUrl ? `Google Map：${item.mapUrl}` : "",
+    `價位：${ratingText(item.price)}`,
+    `美味：${ratingText(item.taste)}`,
+    `地點：${ratingText(item.location)}`,
+    `用餐環境：${ratingText(item.environment)}`,
+    item.note ? `備註：${item.note}` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function ratingText(value) {
+  const count = Math.max(0, Math.min(5, Number(value) || 0));
+  return `${count}/5`;
+}
+
+async function copyRecommendationSummary(type, id) {
+  const item = loadData()[type]?.find((entry) => entry.id === id);
+  if (!item) return;
+  const note = document.getElementById("recommendationNote");
+  try {
+    await navigator.clipboard.writeText(recommendationSummaryText(type, item));
+    if (note) note.textContent = "推薦摘要已複製，可以貼到 LINE 或訊息裡。";
+  } catch (error) {
+    console.error(error);
+    if (note) note.textContent = "複製失敗，請改用手動選取文字。";
+  }
+}
+
+function exportRecommendationPdf(type, id) {
+  const item = loadData()[type]?.find((entry) => entry.id === id);
+  if (!item) return;
+  const printArea = document.getElementById("printArea");
+  const originalTitle = document.title;
+  printArea.innerHTML = recommendationPrintHtml(type, item);
+  printArea.setAttribute("aria-hidden", "false");
+  document.title = `${safeFileName(item.name)}-${type === "hotels" ? "hotel" : "restaurant"}`;
+  window.print();
+  setTimeout(() => {
+    document.title = originalTitle;
+    printArea.setAttribute("aria-hidden", "true");
+  }, 500);
+}
+
+function recommendationPrintHtml(type, item) {
+  const title = type === "hotels" ? "飯店推薦" : "蔬食餐廳推薦";
+  const ratingRows = type === "hotels"
+    ? [["價位", item.price], ["舒適度", item.comfort], ["早餐", item.breakfast], ["地點", item.location]]
+    : [["價位", item.price], ["美味", item.taste], ["地點", item.location], ["用餐環境", item.environment]];
+  return `
+    <article class="print-document">
+      <header class="print-header">
+        <p>跟著 Cutefish 去旅行</p>
+        <h1>${escapeHtml(item.name)}</h1>
+        <div>${escapeHtml(title)}｜${escapeHtml(item.city || "尚未填寫城市")}</div>
+      </header>
+      <section class="print-grid">
+        ${printBlock("地址", item.address)}
+        ${printBlock("備註", item.note)}
+        ${ratingRows.map(([label, value]) => printBlock(label, ratingText(value))).join("")}
+      </section>
+      <section class="print-section">
+        <h2>連結</h2>
+        ${printLinkList([["Google Map", item.mapUrl], ["分享網址", recommendationShareUrl(type, item.id)]])}
+      </section>
+    </article>
+  `;
+}
+
+function recommendationShareUrl(type, id) {
+  const url = new URL(location.href);
+  url.hash = `rec-${type}-${id}`;
+  return url.toString();
+}
+
 function exportTripPdf(id) {
   const trip = loadData().trips.find((item) => item.id === id);
   if (!trip) return;
@@ -1074,6 +1206,145 @@ function safeFileName(value) {
   return String(value || "travel").replace(/[\/:*?"<>|]/g, "-").slice(0, 60);
 }
 
+function currentWeatherButton(trip) {
+  if ((trip.status || "planning") !== "planning") return "";
+  return `<button type="button" data-current-weather="${trip.id}">更新即時天氣</button>`;
+}
+
+function currentWeatherSnippet(trip) {
+  if (!trip.currentWeather) return "";
+  return `<p class="current-weather-mini">${escapeHtml(currentWeatherShortText(trip.currentWeather))}</p>`;
+}
+
+function currentWeatherPanel(trip) {
+  if (!trip.currentWeather) {
+    if ((trip.status || "planning") !== "planning") return "";
+    return `
+      <section class="current-weather-panel empty-weather">
+        <strong>當地即時天氣</strong>
+        <p>尚未更新，按「更新即時天氣」即可讀取現在狀況。</p>
+      </section>`;
+  }
+  return `
+    <section class="current-weather-panel">
+      <div>
+        <strong>當地即時天氣</strong>
+        <p>${escapeHtml(currentWeatherUpdatedText(trip.currentWeather))}</p>
+      </div>
+      <div class="weather-now-main">${escapeHtml(Math.round(trip.currentWeather.temperature))}°C</div>
+      <div class="weather-now-meta">
+        <span>${escapeHtml(trip.currentWeather.condition)}</span>
+        <span>體感 ${escapeHtml(Math.round(trip.currentWeather.apparentTemperature))}°C</span>
+        <span>濕度 ${escapeHtml(Math.round(trip.currentWeather.humidity))}%</span>
+        <span>降雨 ${escapeHtml(Number(trip.currentWeather.precipitation) || 0)} mm</span>
+        <span>風速 ${escapeHtml(Math.round(trip.currentWeather.windSpeed))} km/h</span>
+      </div>
+    </section>`;
+}
+
+function currentWeatherShortText(weather) {
+  return `現在 ${Math.round(weather.temperature)}°C，${weather.condition}｜${currentWeatherUpdatedText(weather)}`;
+}
+
+function currentWeatherUpdatedText(weather) {
+  return `${weather.placeName || "旅遊地點"}，更新 ${formatWeatherTime(weather.updatedAt)}`;
+}
+
+function formatWeatherTime(value) {
+  if (!value) return "剛剛";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
+  return new Intl.DateTimeFormat("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+async function updateTripCurrentWeather(id, button) {
+  const data = loadData();
+  const trip = data.trips.find((item) => item.id === id);
+  if (!trip) return;
+  if (!trip.location) {
+    alert("請先在旅程裡填寫旅遊地點。");
+    return;
+  }
+  const originalText = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "讀取中...";
+  }
+  try {
+    trip.currentWeather = await getCurrentWeather(trip.location);
+    saveData(data);
+    const detailOpen = document.getElementById("tripDetail")?.dataset.tripId === id;
+    render();
+    if (detailOpen) showTrip(id);
+  } catch (error) {
+    console.error(error);
+    alert("即時天氣讀取失敗，請稍後再試，或確認旅遊地點是否能搜尋到。");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
+async function getCurrentWeather(location) {
+  const place = await geocodePlace(location);
+  const params = new URLSearchParams({
+    latitude: place.latitude,
+    longitude: place.longitude,
+    current: "weather_code,temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,wind_speed_10m",
+    timezone: "auto"
+  });
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!response.ok) throw new Error("Current weather request failed");
+  const data = await response.json();
+  const current = data.current || {};
+  return {
+    placeName: [place.name, place.admin1, place.country].filter(Boolean).join("，"),
+    condition: weatherCodeText(current.weather_code),
+    temperature: Number(current.temperature_2m) || 0,
+    apparentTemperature: Number(current.apparent_temperature) || 0,
+    humidity: Number(current.relative_humidity_2m) || 0,
+    precipitation: Number(current.precipitation) || 0,
+    windSpeed: Number(current.wind_speed_10m) || 0,
+    updatedAt: current.time || new Date().toISOString()
+  };
+}
+
+async function geocodePlace(location) {
+  for (const candidate of locationCandidates(location)) {
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(candidate)}&count=1&language=zh&format=json`;
+    const geoResponse = await fetch(geoUrl);
+    if (!geoResponse.ok) throw new Error("Geocoding request failed");
+    const geoData = await geoResponse.json();
+    const place = geoData.results?.[0];
+    if (place) return place;
+  }
+  throw new Error("Location not found");
+}
+
+function locationCandidates(location) {
+  const base = String(location || "").trim();
+  const shortName = base.split(/[，,、｜|\s]/)[0];
+  const variants = [base, shortName];
+  [base, shortName].forEach((name) => {
+    if (!name) return;
+    variants.push(name.replace(/台/g, "臺"));
+    variants.push(name.replace(/臺/g, "台"));
+    if (!/[市縣]$/.test(name)) {
+      variants.push(`${name}市`, `${name}縣`);
+      variants.push(`${name.replace(/台/g, "臺")}市`, `${name.replace(/台/g, "臺")}縣`);
+      variants.push(`${name.replace(/臺/g, "台")}市`, `${name.replace(/臺/g, "台")}縣`);
+    }
+  });
+  return [...new Set(variants.filter(Boolean))];
+}
+
 async function fetchTripWeather() {
   const form = document.getElementById("adminForm");
   const button = document.getElementById("fetchWeatherButton");
@@ -1101,12 +1372,7 @@ async function fetchTripWeather() {
 }
 
 async function getWeatherForecast(location, startDate) {
-  const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=zh&format=json`;
-  const geoResponse = await fetch(geoUrl);
-  if (!geoResponse.ok) throw new Error("Geocoding request failed");
-  const geoData = await geoResponse.json();
-  const place = geoData.results?.[0];
-  if (!place) throw new Error("Location not found");
+  const place = await geocodePlace(location);
 
   const params = new URLSearchParams({
     latitude: place.latitude,
@@ -1396,10 +1662,12 @@ function allTripCard(trip) {
         <span class="tag status-tag status-${trip.status || "planning"}">${tripStatusText(trip.status)}</span>
         <h3>${trip.title}</h3>
         <p>${trip.location}</p>
+        ${currentWeatherSnippet(trip)}
       </div>
       <div class="tag-list"><span class="tag">總費用 ${money(total)}</span><span class="tag">${trip.attendees || 1} 人</span></div>
       <div class="card-actions">
         <button type="button" data-trip="${trip.id}">查看詳情</button>
+        ${currentWeatherButton(trip)}
         ${trip.mapUrl ? `<a href="${trip.mapUrl}" target="_blank" rel="noreferrer">Google Map</a>` : ""}
         <button class="admin-only" type="button" data-edit-trip="${trip.id}">編輯</button>
       </div>
@@ -1429,6 +1697,8 @@ function renderRecommendation(type) {
   document.getElementById("allTripsView")?.classList.add("hidden");
   document.getElementById("recommendationView").classList.remove("hidden");
   document.getElementById("recommendationTitle").textContent = titleMap[type];
+  const note = document.getElementById("recommendationNote");
+  if (note) note.textContent = "";
   document.getElementById("recommendationGrid").innerHTML = data[type].map((item) => recommendationCard(type, item)).join("") ||
     `<article class="recommend-card"><h3>尚未新增</h3><p>管理員登入後可以新增內容。</p></article>`;
 }
@@ -1436,24 +1706,28 @@ function renderRecommendation(type) {
 function recommendationCard(type, item) {
   if (type === "hotels") {
     return `
-      <article class="recommend-card">
+      <article class="recommend-card" id="rec-${type}-${item.id}">
         <h3>${item.name}</h3>
         <p>${item.city || "尚未填寫城市"}</p>
         <p>${item.address || "尚未填寫地址"}</p>
         ${item.mapUrl ? `<p><a href="${item.mapUrl}" target="_blank" rel="noreferrer">Google Map</a></p>` : ""}
         <p>價位 ${stars(item.price)}</p><p>舒適度 ${stars(item.comfort)}</p><p>早餐 ${stars(item.breakfast)}</p><p>地點 ${stars(item.location)}</p>
-        <p>${item.note || ""}</p>${recommendActions(type, item.id)}
+        <p>${item.note || ""}</p>
+        ${recommendationSharePanel(type, item)}
+        ${recommendActions(type, item.id)}
       </article>`;
   }
   if (type === "restaurants") {
     return `
-      <article class="recommend-card">
+      <article class="recommend-card" id="rec-${type}-${item.id}">
         <h3>${item.name}</h3>
         <p>${item.city || "尚未填寫城市"}</p>
         <p>${item.address || "尚未填寫地址"}</p>
         ${item.mapUrl ? `<p><a href="${item.mapUrl}" target="_blank" rel="noreferrer">Google Map</a></p>` : ""}
         <p>價位 ${stars(item.price)}</p><p>美味 ${stars(item.taste)}</p><p>地點 ${stars(item.location)}</p><p>用餐環境 ${stars(item.environment)}</p>
-        <p>${item.note || ""}</p>${recommendActions(type, item.id)}
+        <p>${item.note || ""}</p>
+        ${recommendationSharePanel(type, item)}
+        ${recommendActions(type, item.id)}
       </article>`;
   }
   return `
@@ -1476,8 +1750,11 @@ function recommendationCard(type, item) {
 }
 
 function recommendActions(type, id) {
+  const recommendTools = ["hotels", "restaurants"].includes(type)
+    ? `<button type="button" data-copy-rec="${type}:${id}">複製推薦摘要</button><button type="button" data-print-rec="${type}:${id}">匯出 PDF</button>`
+    : "";
   const createTrip = type === "wishlist" ? `<button class="admin-only" type="button" data-wish-trip="${id}">建立旅程</button>` : "";
-  return `<div class="card-actions">${createTrip}<button class="admin-only" type="button" data-edit-rec="${type}:${id}">編輯</button><button class="admin-only" type="button" data-delete-rec="${type}:${id}">刪除</button></div>`;
+  return `<div class="card-actions">${recommendTools}${createTrip}<button class="admin-only" type="button" data-edit-rec="${type}:${id}">編輯</button><button class="admin-only" type="button" data-delete-rec="${type}:${id}">刪除</button></div>`;
 }
 
 function openRecommendationForm(type, id) {
@@ -1643,11 +1920,20 @@ document.addEventListener("click", (event) => {
     renderCalendar(loadData());
   }
   if (target.dataset.trip) showTrip(target.dataset.trip);
+  if (target.dataset.currentWeather) updateTripCurrentWeather(target.dataset.currentWeather, target);
   if (target.dataset.editTrip) openTripForm(target.dataset.editTrip);
   if (target.dataset.deleteTrip) deleteTrip(target.dataset.deleteTrip);
   if (target.dataset.lineTrip) copyLineAnnouncement(target.dataset.lineTrip);
   if (target.dataset.copyTrip) copyTripSummary(target.dataset.copyTrip);
   if (target.dataset.printTrip) exportTripPdf(target.dataset.printTrip);
+  if (target.dataset.copyRec) {
+    const [type, id] = target.dataset.copyRec.split(":");
+    copyRecommendationSummary(type, id);
+  }
+  if (target.dataset.printRec) {
+    const [type, id] = target.dataset.printRec.split(":");
+    exportRecommendationPdf(type, id);
+  }
   if (target.dataset.view) renderRecommendation(target.dataset.view);
   if (target.id === "closeRecommendation" || target.id === "heroHomeButton" || target.dataset.mobileHome !== undefined) showHome();
   if (target.dataset.mobileCalendar !== undefined) document.querySelector(".calendar-panel")?.scrollIntoView({ behavior: "smooth" });
@@ -1705,3 +1991,8 @@ setInterval(() => renderCountdown(loadData()), 1000);
 render();
 initFirebase();
 openTripFromHash();
+openRecommendationFromHash();
+window.addEventListener("hashchange", () => {
+  openTripFromHash();
+  openRecommendationFromHash();
+});

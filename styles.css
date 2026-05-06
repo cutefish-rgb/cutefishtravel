@@ -529,6 +529,12 @@ button {
   margin: 0 0 8px;
 }
 
+.recommend-card.highlight-card {
+  outline: 3px solid #d94b45;
+  outline-offset: 3px;
+  box-shadow: 0 14px 32px rgba(217, 75, 69, 0.18);
+}
+
 .quick-links p,
 .trip-card p,
 .recommend-card p {
@@ -557,6 +563,16 @@ button {
 
 .trip-card-main .status-tag {
   justify-self: start;
+}
+
+.current-weather-mini {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f8f3;
+  color: var(--leaf-dark) !important;
+  font-weight: 750;
 }
 
 .trip-card time {
@@ -653,6 +669,48 @@ button {
   margin: 12px 0 4px;
 }
 
+.current-weather-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f8f3;
+}
+
+.current-weather-panel p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.empty-weather {
+  display: block;
+}
+
+.weather-now-main {
+  color: var(--rose);
+  font-size: 34px;
+  font-weight: 900;
+}
+
+.weather-now-meta {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+.weather-now-meta span {
+  border-radius: 999px;
+  background: #fff;
+  color: var(--leaf-dark);
+  padding: 6px 10px;
+  font-weight: 750;
+}
+
 .gathering-highlight {
   margin: 14px 0;
   padding: 14px;
@@ -690,6 +748,32 @@ button {
 .trip-qr-panel img {
   width: 118px;
   height: 118px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+}
+
+.recommend-qr-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f8f3;
+}
+
+.recommend-qr-panel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.recommend-qr-panel img {
+  width: 92px;
+  height: 92px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -982,9 +1066,14 @@ textarea {
     padding-bottom: 0;
   }
 
-  .trip-qr-panel {
+  .trip-qr-panel,
+  .recommend-qr-panel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .current-weather-panel {
+    grid-template-columns: 1fr;
   }
 
   .participant-list div {
