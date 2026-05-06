@@ -964,6 +964,13 @@ function firebaseAuthMessage(error) {
   return messages[code] || `Firebase 帳號處理失敗：${code || "未知錯誤"}`;
 }
 
+function showHome() {
+  currentView = "home";
+  document.querySelector(".layout").classList.remove("hidden");
+  document.getElementById("recommendationView").classList.add("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function renderRecommendation(type) {
   const data = loadData();
   const titleMap = { hotels: "飯店推薦", restaurants: "蔬食餐廳推薦", wishlist: "許願清單" };
@@ -1096,11 +1103,7 @@ document.addEventListener("click", (event) => {
   if (target.dataset.deleteTrip) deleteTrip(target.dataset.deleteTrip);
   if (target.dataset.copyTrip) copyTripSummary(target.dataset.copyTrip);
   if (target.dataset.view) renderRecommendation(target.dataset.view);
-  if (target.id === "closeRecommendation") {
-    currentView = "home";
-    document.querySelector(".layout").classList.remove("hidden");
-    document.getElementById("recommendationView").classList.add("hidden");
-  }
+  if (target.id === "closeRecommendation" || target.id === "heroHomeButton") showHome();
   if (target.id === "addRecommendation") openRecommendationForm(currentView);
   if (target.dataset.editRec) {
     const [type, id] = target.dataset.editRec.split(":");
