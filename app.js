@@ -9,6 +9,7 @@ let calendarDate = new Date(today.getFullYear(), today.getMonth(), 1);
 let currentView = "home";
 let tripSearchQuery = "";
 let tripStatusFilter = "all";
+let autoWeatherRefreshRunning = false;
 let appState;
 let firebaseState = {
   configured: false,
@@ -227,6 +228,7 @@ function sanitizeData(data) {
     mapUrl: "",
     coverImage: "",
     currentWeather: null,
+    weatherForecastUpdatedAt: "",
     participants: [],
     review: "",
     gatherTime: "",
@@ -378,6 +380,7 @@ function render() {
   renderQr();
   if (["hotels", "restaurants", "wishlist"].includes(currentView)) renderRecommendation(currentView);
   if (currentView === "allTrips") renderAllTrips();
+  scheduleAutoWeatherRefresh();
 }
 
 function renderHero(data) {
@@ -785,6 +788,7 @@ function openTripForm(id) {
     coverImage: "",
     status: "planning",
     currentWeather: null,
+    weatherForecastUpdatedAt: "",
     transport: "",
     hotel: "",
     attractions: "",
@@ -915,6 +919,7 @@ function saveTripForm(form, id) {
     coverImage: formData.get("coverImage").trim(),
     status: formData.get("status") || "planning",
     currentWeather: existingTrip?.currentWeather || null,
+    weatherForecastUpdatedAt: existingTrip?.weatherForecastUpdatedAt || "",
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate") || formData.get("startDate"),
     attendees: Number(formData.get("attendees")) || 1,
@@ -1206,6 +1211,50 @@ function safeFileName(value) {
   return String(value || "travel").replace(/[\/:*?"<>|]/g, "-").slice(0, 60);
 }
 
+function scheduleAutoWeatherRefresh() {
+  if (autoWeatherRefreshRunning) return;
+  const tripIds = loadData().trips.filter(shouldAutoRefreshWeather).map((trip) => trip.id);
+  if (!tripIds.length) return;
+  autoWeatherRefreshRunning = true;
+  setTimeout(() => refreshUpcomingWeatherForecasts(tripIds).finally(() => {
+    autoWeatherRefreshRunning = false;
+  }), 0);
+}
+
+function shouldAutoRefreshWeather(trip) {
+  if ((trip.status || "planning") !== "planning") return false;
+  if (!trip.location || !trip.startDate) return false;
+  const daysAway = daysUntilTrip(trip.startDate);
+  if (daysAway < 0 || daysAway > 7) return false;
+  const todayKey = localDateKey(today);
+  const attemptKey = `weatherAutoAttempt:${trip.id}:${todayKey}`;
+  if (sessionStorage.getItem(attemptKey)) return false;
+  const updatedAt = trip.weatherForecastUpdatedAt ? new Date(trip.weatherForecastUpdatedAt) : null;
+  if (!updatedAt || Number.isNaN(updatedAt.getTime())) return true;
+  return localDateKey(updatedAt) !== todayKey;
+}
+
+async function refreshUpcomingWeatherForecasts(tripIds) {
+  const data = loadData();
+  let changed = false;
+  for (const id of tripIds) {
+    const trip = data.trips.find((item) => item.id === id);
+    if (!trip || !shouldAutoRefreshWeather(trip)) continue;
+    sessionStorage.setItem(`weatherAutoAttempt:${trip.id}:${localDateKey(today)}`, "true");
+    try {
+      trip.weatherForecast = await getWeatherForecast(trip.location, trip.startDate);
+      trip.weatherForecastUpdatedAt = new Date().toISOString();
+      changed = true;
+    } catch (error) {
+      console.error("自動更新天氣失敗", error);
+    }
+  }
+  if (changed) {
+    saveData(data);
+    render();
+  }
+}
+
 function currentWeatherButton(trip) {
   if ((trip.status || "planning") !== "planning") return "";
   return `<button type="button" data-current-weather="${trip.id}">更新即時天氣</button>`;
@@ -1393,32 +1442,55 @@ async function getWeatherForecast(location, startDate) {
   const forecastResponse = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
   if (!forecastResponse.ok) throw new Error("Forecast request failed");
   const forecastData = await forecastResponse.json();
-  return formatWeatherForecast(location, place, forecastData, Boolean(requestedStart));
+  return formatWeatherForecast(location, place, forecastData, Boolean(requestedStart), startDate);
 }
 
 function forecastStartDate(startDate) {
-  if (!startDate) return "";
-  const tripStart = parseLocalDate(startDate);
-  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const daysAway = Math.floor((tripStart - dayStart) / 86400000);
+  const daysAway = daysUntilTrip(startDate);
   if (daysAway < 0 || daysAway > 15) return "";
   return startDate;
 }
 
-function formatWeatherForecast(location, place, forecastData, matchesTripDate) {
+function formatWeatherForecast(location, place, forecastData, matchesTripDate, startDate = "") {
   const daily = forecastData.daily || {};
   const placeName = [place.name, place.admin1, place.country].filter(Boolean).join("，");
-  const lines = (daily.time || []).map((date, index) => {
-    const min = Math.round(daily.temperature_2m_min?.[index]);
-    const max = Math.round(daily.temperature_2m_max?.[index]);
-    const rain = daily.precipitation_probability_max?.[index];
-    const weather = weatherCodeText(daily.weather_code?.[index]);
-    return `${fullDateText(date)}：${weather}，${min}-${max} 度，降雨機率最高 ${rain ?? 0}%`;
-  });
+  const forecastDays = (daily.time || []).map((date, index) => ({
+    date,
+    min: Math.round(daily.temperature_2m_min?.[index]),
+    max: Math.round(daily.temperature_2m_max?.[index]),
+    rain: daily.precipitation_probability_max?.[index] ?? 0,
+    code: daily.weather_code?.[index],
+    weather: weatherCodeText(daily.weather_code?.[index])
+  }));
+  const lines = forecastDays.map((day) => `${fullDateText(day.date)}：${day.weather}，${day.min}-${day.max} 度，降雨機率最高 ${day.rain}%`);
+  const daysAway = daysUntilTrip(startDate);
+  const timing = daysAway >= 0 && daysAway <= 3 ? "出發前三天內" : daysAway >= 0 && daysAway <= 7 ? "出發前一週內" : "近期";
   const note = matchesTripDate
-    ? `以下為 ${location} 旅遊日期附近的天氣預測：`
+    ? `已自動更新 ${location} 旅遊日期附近的天氣預測（${timing}）：`
     : `目前只能自動抓近期天氣，以下為 ${location}（${placeName}）未來 5 天預測；出發前三天建議再更新一次：`;
-  return [note, ...lines].join("\n");
+  return [note, ...lines, "", travelWeatherAdvice(forecastDays, daysAway)].filter(Boolean).join("\n");
+}
+
+function travelWeatherAdvice(days, daysAway) {
+  if (!days.length) return "";
+  const maxTemp = Math.max(...days.map((day) => day.max).filter(Number.isFinite));
+  const minTemp = Math.min(...days.map((day) => day.min).filter(Number.isFinite));
+  const maxRain = Math.max(...days.map((day) => Number(day.rain) || 0));
+  const hasRain = days.some((day) => [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(Number(day.code)) || Number(day.rain) >= 40);
+  const advice = [];
+  if (hasRain) advice.push("攜帶摺疊傘或輕便雨衣，鞋子建議選防滑好走的款式");
+  if (Number.isFinite(maxTemp) && maxTemp >= 30) advice.push("天氣偏熱，準備帽子、防曬、補水用品");
+  if (Number.isFinite(minTemp) && minTemp <= 18) advice.push("早晚偏涼，帶薄外套或圍巾");
+  if (!advice.length) advice.push("天氣看起來穩定，仍建議出發前一天再確認一次");
+  const prefix = daysAway >= 0 && daysAway <= 3 ? "臨行建議" : "準備建議";
+  return `${prefix}：${advice.join("；")}。`;
+}
+
+function daysUntilTrip(startDate) {
+  if (!startDate) return Infinity;
+  const tripStart = parseLocalDate(startDate);
+  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.floor((tripStart - dayStart) / 86400000);
 }
 
 function weatherCodeText(code) {
