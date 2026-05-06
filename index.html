@@ -19,8 +19,11 @@
       <div class="hero-copy">
         <button class="hero-home" id="heroHomeButton" type="button"><span id="heroTitle">跟著 Cutefish 去旅行</span></button>
         <p id="heroQuote">We travel not to escape life, but for life not to escape us.</p>
+        <button class="hero-edit admin-only" id="editHeroMainButton" type="button">更改首頁大圖與文字</button>
       </div>
     </header>
+
+    <section class="notice-band" id="noticeBand"></section>
 
     <main class="layout">
       <aside class="calendar-panel" aria-label="旅遊月曆">
@@ -33,6 +36,12 @@
           <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
         </div>
         <div class="calendar-grid" id="calendarGrid"></div>
+        <div class="calendar-legend" aria-label="月曆圖例">
+          <span><i class="legend-trip"></i>旅程</span>
+          <span><i class="legend-saturday"></i>週六</span>
+          <span><i class="legend-sunday"></i>週日</span>
+          <span><i class="legend-holiday"></i>國定假日</span>
+        </div>
       </aside>
 
       <section class="content">
@@ -42,6 +51,7 @@
             <h2 id="countdownTitle">載入中</h2>
           </div>
           <div class="countdown" id="countdown"></div>
+          <p class="countdown-reminder" id="countdownReminder"></p>
         </section>
 
         <section class="quick-links">
@@ -62,20 +72,40 @@
           </article>
         </section>
 
-        <section class="section-head">
+        <section class="section-head" id="tripsSection">
           <div>
             <p class="eyebrow">近日內的旅遊</p>
             <h2>即將發生的行程</h2>
           </div>
           <div class="section-actions">
             <a class="helper-link" href="https://where-am-i-mate.lovable.app/" target="_blank" rel="noreferrer">迷路幫手</a>
+            <button class="secondary" id="allTripsButton" type="button">全部旅程</button>
             <button class="primary admin-only" id="newTripButton" type="button">新增旅遊</button>
           </div>
+        </section>
+        <section class="trip-tools" aria-label="旅程搜尋與篩選">
+          <label>搜尋旅程<input id="tripSearch" type="search" placeholder="輸入地點、名稱或備註" /></label>
+          <label>狀態篩選<select id="tripStatusFilter">
+            <option value="all">全部狀態</option>
+            <option value="planning">規劃中</option>
+            <option value="open">開放報名</option>
+            <option value="confirmed">已成團</option>
+            <option value="done">已結束</option>
+          </select></label>
         </section>
         <div class="trip-list" id="tripList"></div>
       </section>
 
     </main>
+
+    <section class="all-trips-view hidden" id="allTripsView">
+      <div class="view-header">
+        <button class="secondary" id="closeAllTrips" type="button">返回首頁</button>
+        <h2>全部旅程</h2>
+        <button class="primary admin-only" id="newTripFromAllButton" type="button">新增旅遊</button>
+      </div>
+      <div class="all-trip-list" id="allTripList"></div>
+    </section>
 
     <section class="recommendation-view hidden" id="recommendationView">
       <div class="view-header">
@@ -127,6 +157,16 @@
         <div id="tripDetail"></div>
       </article>
     </dialog>
+
+    <section class="print-area" id="printArea" aria-hidden="true"></section>
+
+    <nav class="mobile-nav" aria-label="手機快捷列">
+      <button type="button" data-mobile-home>首頁</button>
+      <button type="button" data-mobile-calendar>月曆</button>
+      <button type="button" id="mobileAllTripsButton">全部</button>
+      <button type="button" data-view="hotels">推薦</button>
+      <button type="button" id="mobileAdminButton">管理</button>
+    </nav>
 
     <script src="firebase-config.js"></script>
     <script src="https://www.gstatic.com/firebasejs/12.7.0/firebase-app-compat.js"></script>

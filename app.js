@@ -7,6 +7,8 @@ const firebaseDocument = "siteData";
 const today = new Date();
 let calendarDate = new Date(today.getFullYear(), today.getMonth(), 1);
 let currentView = "home";
+let tripSearchQuery = "";
+let tripStatusFilter = "all";
 let appState;
 let firebaseState = {
   configured: false,
@@ -19,6 +21,41 @@ let firebaseState = {
   adminEmails: []
 };
 
+const taiwanHolidays = {
+  "2026-01-01": "元旦",
+  "2026-02-14": "春節假期",
+  "2026-02-15": "春節假期",
+  "2026-02-16": "春節假期",
+  "2026-02-17": "春節",
+  "2026-02-18": "春節",
+  "2026-02-19": "春節",
+  "2026-02-20": "春節假期",
+  "2026-02-21": "春節假期",
+  "2026-02-22": "春節假期",
+  "2026-02-27": "和平紀念日補假",
+  "2026-02-28": "和平紀念日",
+  "2026-04-03": "兒童節補假",
+  "2026-04-04": "兒童節",
+  "2026-04-05": "清明節",
+  "2026-04-06": "清明節補假",
+  "2026-05-01": "勞動節",
+  "2026-06-19": "端午節",
+  "2026-09-25": "中秋節",
+  "2026-09-28": "教師節",
+  "2026-10-09": "國慶日補假",
+  "2026-10-10": "國慶日",
+  "2026-10-24": "臺灣光復節",
+  "2026-10-26": "臺灣光復節補假",
+  "2026-12-25": "行憲紀念日"
+};
+
+const tripStatusLabels = {
+  planning: "規劃中",
+  open: "開放報名",
+  confirmed: "已成團",
+  done: "已結束"
+};
+
 const sampleTrips = [
   {
     id: crypto.randomUUID(),
@@ -26,6 +63,8 @@ const sampleTrips = [
     startDate: "2026-06-12",
     endDate: "2026-06-14",
     location: "宜蘭 礁溪",
+    status: "open",
+    mapUrl: "https://maps.google.com/?q=宜蘭礁溪",
     transport: "台北車站集合，搭乘葛瑪蘭客運至礁溪轉乘接駁車。",
     hotel: "山月溫泉旅宿，雙人房，含早餐與大眾湯。",
     attractions: "礁溪溫泉公園、林美石磐步道、幾米公園、傳藝中心。",
@@ -33,6 +72,13 @@ const sampleTrips = [
     weatherForecast: "預計 24-29 度，午後可能短暫陣雨，建議攜帶薄外套與折傘。",
     luggageList: "健走鞋、薄外套、折傘、個人藥品、保溫瓶、泡湯衣物。",
     tripNotes: "步道行程可依天氣調整，長輩可選擇在咖啡廳休息。",
+    review: "",
+    checklist: [
+      { item: "訂房確認", done: true },
+      { item: "客運票與租車確認", done: false },
+      { item: "行前天氣更新", done: false },
+      { item: "個人藥品與雨具", done: false }
+    ],
     gatherTime: "09:00",
     gatherPlace: "台北車站東三門",
     contactName: "Cutefish",
@@ -61,6 +107,8 @@ const sampleTrips = [
     startDate: "2026-07-04",
     endDate: "2026-07-04",
     location: "台中市區",
+    status: "planning",
+    mapUrl: "https://maps.google.com/?q=台中市區",
     transport: "高鐵台中站集合，包車往返。",
     hotel: "一日遊無住宿。",
     attractions: "新社花海、審計新村、宮原眼科周邊。",
@@ -68,6 +116,12 @@ const sampleTrips = [
     weatherForecast: "夏季偏熱，建議查看出發前三日預報，準備帽子與補水。",
     luggageList: "遮陽帽、防曬、輕便鞋、環保杯、外套。",
     tripNotes: "花市步行時間較多，會安排充足休息點。",
+    review: "",
+    checklist: [
+      { item: "包車確認", done: false },
+      { item: "午餐餐廳預約", done: false },
+      { item: "提醒攜帶遮陽用品", done: false }
+    ],
     gatherTime: "08:30",
     gatherPlace: "高鐵台中站出口",
     contactName: "Cutefish",
@@ -96,6 +150,10 @@ const sampleData = {
     quote: "We travel not to escape life, but for life not to escape us.",
     image: "assets/hero-travel.png"
   },
+  notices: [
+    { text: "近期旅程請出發前三天更新天氣與集合資訊。" },
+    { text: "新增旅遊後可用 LINE 公告快速分享給同行者。" }
+  ],
   trips: sampleTrips,
   hotels: [
     { id: crypto.randomUUID(), name: "山月溫泉旅宿", city: "宜蘭縣", address: "宜蘭縣礁溪鄉德陽路", mapUrl: "https://maps.google.com/", price: 4, comfort: 5, breakfast: 4, location: 5, note: "離車站近，長輩移動方便。" }
@@ -104,7 +162,7 @@ const sampleData = {
     { id: crypto.randomUUID(), name: "綠桌蔬食", city: "宜蘭縣", address: "宜蘭縣礁溪鄉溫泉路", mapUrl: "https://maps.google.com/", price: 4, taste: 5, location: 4, environment: 5, note: "合菜選擇多，可先預約包廂。" }
   ],
   wishlist: [
-    { id: crypto.randomUUID(), place: "花蓮雲山水", month: "10 月", surveyUrl: "https://forms.gle/example", note: "想安排兩天一夜，避開暑假人潮。" }
+    { id: crypto.randomUUID(), place: "花蓮雲山水", month: "10 月", priority: "high", tags: "賞景, 長輩友善, 兩天一夜", surveyStatus: "sent", inspirationLinks: ["https://www.taiwan.net.tw/"], wantCount: 6, bestSeason: "秋季", budget: 5000, surveyUrl: "https://forms.gle/example", note: "想安排兩天一夜，避開暑假人潮。" }
   ]
 };
 
@@ -124,9 +182,10 @@ function loadLocalData() {
     changed = true;
   }
   data.wishlist = (data.wishlist || []).map((item) => {
-    if ("surveyUrl" in item) return item;
+    const next = { priority: "medium", tags: "", surveyStatus: "notSent", inspirationLinks: [], wantCount: 0, bestSeason: "", budget: 0, surveyUrl: "", ...item, inspirationLinks: normalizeLinks(item.inspirationLinks) };
+    if ("surveyUrl" in item && "wantCount" in item && "bestSeason" in item && "budget" in item && "priority" in item && "tags" in item && "surveyStatus" in item && "inspirationLinks" in item) return next;
     changed = true;
-    return { ...item, surveyUrl: "" };
+    return next;
   });
   if (changed) saveData(data);
   return data;
@@ -160,18 +219,28 @@ function sanitizeData(data) {
   if (!clean.hero.image || clean.hero.image === "assets/cutefish-banner.jpg") {
     clean.hero.image = "assets/hero-travel.png";
   }
+  clean.notices = normalizeNotices(clean.notices);
   clean.trips = clean.trips || [];
   clean.trips = clean.trips.map((trip) => ({
+    status: "planning",
+    checklist: [],
+    mapUrl: "",
+    coverImage: "",
+    participants: [],
+    review: "",
     gatherTime: "",
     gatherPlace: "",
     contactName: "",
     contactPhone: "",
     albumUrl: "",
-    ...trip
+    ...trip,
+    checklist: normalizeChecklist(trip.checklist),
+    participants: normalizeParticipants(trip.participants),
+    costs: normalizeCosts(trip.costs)
   }));
   clean.hotels = clean.hotels || [];
   clean.restaurants = clean.restaurants || [];
-  clean.wishlist = (clean.wishlist || []).map((item) => ({ surveyUrl: "", ...item }));
+  clean.wishlist = (clean.wishlist || []).map((item) => ({ priority: "medium", tags: "", surveyStatus: "notSent", inspirationLinks: [], wantCount: 0, bestSeason: "", budget: 0, surveyUrl: "", ...item, wantCount: Number(item.wantCount) || 0, budget: Number(item.budget) || 0, inspirationLinks: normalizeLinks(item.inspirationLinks) }));
   delete clean.updatedAt;
   return clean;
 }
@@ -301,11 +370,13 @@ function render() {
   document.body.classList.toggle("admin", isAdmin());
   document.getElementById("adminButton").textContent = isAdmin() ? "管理員登出" : "管理員登入";
   renderHero(data);
+  renderNotices(data);
   renderCalendar(data);
   renderCountdown(data);
   renderTrips(data);
   renderQr();
-  if (currentView !== "home") renderRecommendation(currentView);
+  if (["hotels", "restaurants", "wishlist"].includes(currentView)) renderRecommendation(currentView);
+  if (currentView === "allTrips") renderAllTrips();
 }
 
 function renderHero(data) {
@@ -315,6 +386,13 @@ function renderHero(data) {
     `linear-gradient(90deg, rgba(20, 43, 38, 0.78), rgba(20, 43, 38, 0.2)), url("${data.hero.image}")`;
 }
 
+function renderNotices(data) {
+  const band = document.getElementById("noticeBand");
+  const notices = normalizeNotices(data.notices);
+  band.innerHTML = notices.length ? notices.map((notice) => `<p>${escapeHtml(notice.text)}</p>`).join("") : "";
+  band.classList.toggle("hidden", !notices.length);
+}
+
 function renderCalendar(data) {
   const grid = document.getElementById("calendarGrid");
   const title = document.getElementById("calendarTitle");
@@ -322,13 +400,14 @@ function renderCalendar(data) {
   const month = calendarDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const days = new Date(year, month + 1, 0).getDate();
-  const tripDates = new Set();
+  const tripDates = new Map();
 
-  data.trips.forEach((trip) => {
+  [...data.trips].sort(byDate).forEach((trip) => {
     const start = parseLocalDate(trip.startDate);
     const end = parseLocalDate(trip.endDate || trip.startDate);
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      tripDates.add(localDateKey(date));
+      const key = localDateKey(date);
+      if (!tripDates.has(key)) tripDates.set(key, trip);
     }
   });
 
@@ -338,15 +417,30 @@ function renderCalendar(data) {
   for (let day = 1; day <= days; day += 1) {
     const date = new Date(year, month, day);
     const iso = localDateKey(date);
-    grid.append(dayCell(day, tripDates.has(iso) ? "trip-day" : "", date));
+    const holiday = holidayName(iso);
+    const classes = [
+      tripDates.has(iso) ? "trip-day" : "",
+      holiday ? "holiday-day" : "",
+      date.getDay() === 0 ? "sunday-day" : "",
+      date.getDay() === 6 ? "saturday-day" : ""
+    ].filter(Boolean).join(" ");
+    grid.append(dayCell(day, classes, date, tripDates.get(iso), holiday));
   }
 }
 
-function dayCell(text, className, date) {
+function dayCell(text, className, date, trip, holiday) {
   const cell = document.createElement("button");
   cell.type = "button";
   cell.className = `day ${className}`;
   if (className === "empty") return cell;
+  if (trip) {
+    cell.dataset.trip = trip.id;
+    cell.title = `查看 ${trip.title}`;
+    cell.setAttribute("aria-label", `${localDateKey(date)} 查看 ${trip.title}`);
+  } else if (holiday) {
+    cell.title = holiday;
+    cell.setAttribute("aria-label", `${localDateKey(date)} ${holiday}`);
+  }
   const solar = document.createElement("span");
   solar.className = "solar-day";
   solar.textContent = text;
@@ -354,7 +448,17 @@ function dayCell(text, className, date) {
   lunar.className = "lunar-day";
   lunar.textContent = lunarText(date);
   cell.append(solar, lunar);
+  if (holiday) {
+    const holidayLabel = document.createElement("span");
+    holidayLabel.className = "holiday-label";
+    holidayLabel.textContent = holiday;
+    cell.append(holidayLabel);
+  }
   return cell;
+}
+
+function holidayName(isoDate) {
+  return taiwanHolidays[isoDate] || "";
 }
 
 function lunarText(date) {
@@ -385,9 +489,11 @@ function renderCountdown(data) {
   const next = upcomingTrips(data)[0];
   const title = document.getElementById("countdownTitle");
   const box = document.getElementById("countdown");
+  const reminder = document.getElementById("countdownReminder");
   if (!next) {
     title.textContent = "目前沒有即將出發的旅遊";
     box.innerHTML = "";
+    if (reminder) reminder.textContent = "";
     return;
   }
   title.textContent = next.title;
@@ -396,6 +502,7 @@ function renderCountdown(data) {
   const hours = Math.floor((diff % 86400000) / 3600000);
   const minutes = Math.floor((diff % 3600000) / 60000);
   const seconds = Math.floor((diff % 60000) / 1000);
+  if (reminder) reminder.textContent = tripReminderText(days, next);
   box.innerHTML = `
     <div class="countdown-days">
       <span>${days}</span>
@@ -409,35 +516,62 @@ function renderCountdown(data) {
   `;
 }
 
+function filteredTrips(trips) {
+  const query = tripSearchQuery.trim().toLowerCase();
+  return trips.filter((trip) => {
+    const matchesStatus = tripStatusFilter === "all" || (trip.status || "planning") === tripStatusFilter;
+    const haystack = [trip.title, trip.location, trip.tripNotes, trip.review, trip.gatherPlace].join(" ").toLowerCase();
+    const matchesQuery = !query || haystack.includes(query);
+    return matchesStatus && matchesQuery;
+  });
+}
+
+function tripReminderText(days, trip) {
+  if (days <= 3) return "出發前三天請更新天氣、確認集合資訊、行李與行前檢查清單。";
+  if (days <= 7) return "出發前一週建議確認交通、住宿與同行人數。";
+  return `目前狀態：${tripStatusText(trip.status)}。出發前三天記得再更新天氣與集合資訊。`;
+}
+
 function renderTrips(data) {
   const list = document.getElementById("tripList");
-  const trips = upcomingTrips(data).slice(0, 6);
+  const trips = filteredTrips(upcomingTrips(data)).slice(0, 6);
   list.innerHTML = trips.map((trip) => {
     const total = totalCost(trip.costs);
+    const aa = total / Math.max(1, Number(trip.attendees) || 1);
     return `
       <article class="trip-card">
-        <time>${dateText(trip.startDate, trip.endDate)}</time>
-        <h3>${trip.title}</h3>
-        <p>${trip.location}</p>
+        ${trip.coverImage ? `<img class="trip-cover" src="${trip.coverImage}" alt="${escapeAttr(trip.title)} 封面圖" />` : ""}
+        <div class="trip-card-main">
+          <time>${dateText(trip.startDate, trip.endDate)}</time>
+          <span class="tag status-tag status-${trip.status || "planning"}">${tripStatusText(trip.status)}</span>
+          <h3>${trip.title}</h3>
+          <p>${trip.location}</p>
+        </div>
         <div class="tag-list">
           <span class="tag">總費用 ${money(total)}</span>
-          <span class="tag">AA ${money(total / Math.max(1, Number(trip.attendees) || 1))}</span>
+          <span class="tag">AA ${money(aa)}</span>
           <span class="tag">${trip.attendees || 1} 人</span>
         </div>
         <div class="card-actions">
           <button type="button" data-trip="${trip.id}">查看詳情</button>
+          ${trip.mapUrl ? `<a href="${trip.mapUrl}" target="_blank" rel="noreferrer">Google Map</a>` : ""}
           <button class="admin-only" type="button" data-edit-trip="${trip.id}">編輯</button>
           <button class="admin-only" type="button" data-delete-trip="${trip.id}">刪除</button>
         </div>
       </article>
     `;
-  }).join("") || `<article class="trip-card"><h3>還沒有近期旅遊</h3><p>管理員登入後可以新增下一趟旅程。</p></article>`;
+  }).join("") || `<article class="trip-card"><h3>找不到符合條件的旅遊</h3><p>可以調整搜尋或狀態篩選。</p></article>`;
 }
 
 function renderQr() {
   const img = document.getElementById("qrCode");
   const url = encodeURIComponent(location.href);
   img.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${url}`;
+}
+
+function openTripFromHash() {
+  const id = location.hash.startsWith("#trip-") ? location.hash.replace("#trip-", "") : "";
+  if (id) showTrip(id);
 }
 
 function showTrip(id) {
@@ -449,10 +583,25 @@ function showTrip(id) {
   const aa = total / Math.max(1, Number(trip.attendees) || 1);
   document.getElementById("tripDetail").innerHTML = `
     <h2>${trip.title}</h2>
+    <p><span class="tag status-tag status-${trip.status || "planning"}">${tripStatusText(trip.status)}</span></p>
     <p><strong>${dateText(trip.startDate, trip.endDate)}</strong>｜${trip.location}</p>
+    <section class="gathering-highlight">
+      <strong>集合資訊</strong>
+      <p>${escapeHtml(gatheringText(trip))}</p>
+    </section>
     <div class="card-actions detail-actions">
       <button type="button" data-copy-trip="${trip.id}">複製行程摘要</button>
+      <button type="button" data-line-trip="${trip.id}">複製 LINE 公告</button>
+      <button type="button" data-print-trip="${trip.id}">匯出 PDF</button>
+      ${trip.mapUrl ? `<a href="${trip.mapUrl}" target="_blank" rel="noreferrer">Google Map 導航</a>` : ""}
     </div>
+    <section class="trip-qr-panel">
+      <div>
+        <strong>分享本旅程</strong>
+        <p>手機掃描後可開啟這趟旅程。</p>
+      </div>
+      <img src="${tripQrUrl(trip.id)}" alt="${escapeAttr(trip.title)} QR Code" />
+    </section>
     <p class="form-note" id="tripCopyNote"></p>
     <div class="detail-grid">
       ${detailBlock("集合資訊", gatheringText(trip))}
@@ -463,7 +612,16 @@ function showTrip(id) {
       ${detailBlock("旅遊地點天氣預測", trip.weatherForecast)}
       ${detailBlock("行李清單建議", trip.luggageList)}
       ${detailBlock("備註", trip.tripNotes)}
+      ${detailBlock("旅遊後回顧", trip.review)}
     </div>
+    <section class="detail-section">
+      <h3>行前檢查清單</h3>
+      ${checklistHtml(trip.checklist)}
+    </section>
+    <section class="detail-section">
+      <h3>報名名單與付款</h3>
+      ${participantsHtml(trip.participants)}
+    </section>
     <section class="detail-section">
       <h3>每日行程時間表</h3>
       <div class="schedule-table">
@@ -473,7 +631,7 @@ function showTrip(id) {
     <section class="detail-section">
       <h3>費用明細與 AA 計算</h3>
       <div class="cost-table">
-        ${trip.costs.map((cost) => `<div class="cost-row"><span>${cost.category}｜${cost.item}</span><strong>${money(cost.amount)}</strong></div>`).join("")}
+        ${trip.costs.map((cost) => `<div class="cost-row"><span>${cost.category}｜${cost.item}<small>${cost.status ? costStatusText(cost.status) : ""}</small></span><strong>${money(cost.amount)}</strong></div>`).join("")}
       </div>
       <p>${Object.entries(totals).map(([name, value]) => `${name} ${money(value)}`).join("，")}</p>
       <p class="total">總計 ${money(total)}，${trip.attendees || 1} 人 AA 每人 ${money(aa)}</p>
@@ -602,6 +760,9 @@ function openTripForm(id) {
     startDate: "",
     endDate: "",
     location: "",
+    mapUrl: "",
+    coverImage: "",
+    status: "planning",
     transport: "",
     hotel: "",
     attractions: "",
@@ -609,6 +770,9 @@ function openTripForm(id) {
     weatherForecast: "",
     luggageList: "",
     tripNotes: "",
+    review: "",
+    participants: [],
+    checklist: [],
     gatherTime: "",
     gatherPlace: "",
     contactName: "",
@@ -634,6 +798,9 @@ function tripFields(trip) {
     <div class="admin-grid">
       ${input("title", "旅遊名稱", trip.title)}
       ${input("location", "地點", trip.location)}
+      ${input("mapUrl", "主要地點 Google Map 連結", trip.mapUrl, "url")}
+      ${input("coverImage", "旅程封面圖網址或檔案路徑", trip.coverImage, "url")}
+      ${statusSelect(trip.status)}
       ${input("startDate", "開始日期", trip.startDate, "date")}
       ${input("endDate", "結束日期", trip.endDate, "date")}
       ${input("attendees", "同行人數", trip.attendees, "number")}
@@ -651,9 +818,12 @@ function tripFields(trip) {
     ${area("carRental", "租車資訊", trip.carRental)}
     ${weatherForecastField(trip.weatherForecast)}
     ${area("luggageList", "行李清單建議", trip.luggageList)}
+    ${area("participants", "報名名單，每行：姓名｜付款狀態｜金額｜備註", participantsText(trip.participants))}
+    ${area("checklist", "行前檢查清單，每行一項；完成項目前面可加 ✓", checklistText(trip.checklist))}
     ${area("tripNotes", "備註", trip.tripNotes)}
+    ${area("review", "旅遊後回顧 / 下次改進", trip.review)}
     ${area("references", "參考網址，每行一個", (trip.references || []).join("\n"))}
-    ${area("costs", "費用明細，每行：分類｜項目｜金額", (trip.costs || []).map((c) => `${c.category}｜${c.item}｜${c.amount}`).join("\n"))}
+    ${area("costs", "費用明細，每行：分類｜項目｜金額｜狀態（預估/已確認/已付款）", (trip.costs || []).map((c) => `${c.category}｜${c.item}｜${c.amount}｜${costStatusText(c.status || "estimated")}`).join("\n"))}
     ${area("schedule", "每日行程時間表，每行：Day｜時間｜活動", (trip.schedule || []).map((s) => `${s.day}｜${s.time}｜${s.activity}`).join("\n"))}
   `;
 }
@@ -665,6 +835,34 @@ function weatherForecastField(value) {
     </label>
     <button class="secondary weather-fetch" id="fetchWeatherButton" type="button">帶入天氣預測</button>
   `;
+}
+
+function statusSelect(value = "planning") {
+  return `<label>旅程狀態<select name="status">${Object.entries(tripStatusLabels).map(([key, label]) => `<option value="${key}" ${key === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
+}
+
+function tripStatusText(status) {
+  return tripStatusLabels[status] || tripStatusLabels.planning;
+}
+
+function normalizeChecklist(items) {
+  if (Array.isArray(items)) {
+    return items.map((item) => {
+      if (typeof item === "string") return { item, done: false };
+      return { item: String(item.item || "").trim(), done: Boolean(item.done) };
+    }).filter((item) => item.item);
+  }
+  return [];
+}
+
+function checklistText(items) {
+  return normalizeChecklist(items).map((item) => `${item.done ? "✓ " : ""}${item.item}`).join("\n");
+}
+
+function checklistHtml(items) {
+  const list = normalizeChecklist(items);
+  if (!list.length) return "<p>尚未建立檢查清單。</p>";
+  return `<ul class="checklist-view">${list.map((item) => `<li class="${item.done ? "done" : ""}"><span>${item.done ? "✓" : ""}</span>${escapeHtml(item.item)}</li>`).join("")}</ul>`;
 }
 
 function input(name, label, value, type = "text") {
@@ -690,6 +888,9 @@ function saveTripForm(form, id) {
     id,
     title: formData.get("title").trim(),
     location: formData.get("location").trim(),
+    mapUrl: formData.get("mapUrl").trim(),
+    coverImage: formData.get("coverImage").trim(),
+    status: formData.get("status") || "planning",
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate") || formData.get("startDate"),
     attendees: Number(formData.get("attendees")) || 1,
@@ -699,7 +900,10 @@ function saveTripForm(form, id) {
     carRental: formData.get("carRental").trim(),
     weatherForecast: formData.get("weatherForecast").trim(),
     luggageList: formData.get("luggageList").trim(),
+    checklist: parseChecklist(formData.get("checklist")),
     tripNotes: formData.get("tripNotes").trim(),
+    review: formData.get("review").trim(),
+    participants: parseParticipants(formData.get("participants")),
     gatherTime: formData.get("gatherTime").trim(),
     gatherPlace: formData.get("gatherPlace").trim(),
     contactName: formData.get("contactName").trim(),
@@ -717,6 +921,18 @@ function saveTripForm(form, id) {
   saveData(data);
 }
 
+async function copyLineAnnouncement(id) {
+  const trip = loadData().trips.find((item) => item.id === id);
+  if (!trip) return;
+  try {
+    await navigator.clipboard.writeText(lineAnnouncementText(trip));
+    document.getElementById("tripCopyNote").textContent = "LINE 公告已複製。";
+  } catch (error) {
+    console.error(error);
+    document.getElementById("tripCopyNote").textContent = "複製失敗，請改用手動選取文字。";
+  }
+}
+
 async function copyTripSummary(id) {
   const trip = loadData().trips.find((item) => item.id === id);
   if (!trip) return;
@@ -730,6 +946,20 @@ async function copyTripSummary(id) {
   }
 }
 
+function lineAnnouncementText(trip) {
+  const total = totalCost(trip.costs);
+  const aa = total / Math.max(1, Number(trip.attendees) || 1);
+  return [
+    `【${trip.title}】`,
+    `日期：${dateText(trip.startDate, trip.endDate)}`,
+    `集合：${[trip.gatherTime, trip.gatherPlace].filter(Boolean).join("｜") || "待公告"}`,
+    `費用：AA 約 ${money(aa)}`,
+    trip.surveyUrl ? `報名/調查：${trip.surveyUrl}` : "",
+    trip.mapUrl ? `地圖：${trip.mapUrl}` : "",
+    trip.tripNotes ? `備註：${trip.tripNotes}` : ""
+  ].filter(Boolean).join("\n");
+}
+
 function tripSummaryText(trip) {
   const total = totalCost(trip.costs);
   const aa = total / Math.max(1, Number(trip.attendees) || 1);
@@ -737,19 +967,110 @@ function tripSummaryText(trip) {
   return [
     `【${trip.title}】`,
     `日期：${dateText(trip.startDate, trip.endDate)}`,
+    `狀態：${tripStatusText(trip.status)}`,
     `地點：${trip.location || "尚未填寫"}`,
+    trip.mapUrl ? `Google Map：${trip.mapUrl}` : "",
     trip.gatherTime || trip.gatherPlace ? `集合：${[trip.gatherTime, trip.gatherPlace].filter(Boolean).join("｜")}` : "",
     trip.contactName || trip.contactPhone ? `聯絡：${[trip.contactName, trip.contactPhone].filter(Boolean).join("｜")}` : "",
     `人數：${trip.attendees || 1} 人`,
     `費用：總計 ${money(total)}，AA 每人 ${money(aa)}`,
     trip.weatherForecast ? `天氣：${trip.weatherForecast}` : "",
     trip.luggageList ? `行李建議：${trip.luggageList}` : "",
+    trip.participants?.length ? `報名名單：\n${participantsText(trip.participants)}` : "",
+    trip.checklist?.length ? `行前檢查：\n${checklistText(trip.checklist)}` : "",
     firstSchedule ? `行程：\n${firstSchedule}` : "",
     trip.surveyUrl ? `行前調查：${trip.surveyUrl}` : "",
     trip.videoUrl ? `影片：${trip.videoUrl}` : "",
     trip.albumUrl ? `相簿：${trip.albumUrl}` : "",
-    trip.tripNotes ? `備註：${trip.tripNotes}` : ""
+    trip.tripNotes ? `備註：${trip.tripNotes}` : "",
+    trip.review ? `旅遊後回顧：${trip.review}` : ""
   ].filter(Boolean).join("\n");
+}
+
+function exportTripPdf(id) {
+  const trip = loadData().trips.find((item) => item.id === id);
+  if (!trip) return;
+  const printArea = document.getElementById("printArea");
+  const originalTitle = document.title;
+  printArea.innerHTML = tripPrintHtml(trip);
+  printArea.setAttribute("aria-hidden", "false");
+  document.title = `${safeFileName(trip.title)}-${trip.startDate || "travel"}`;
+  window.print();
+  setTimeout(() => {
+    document.title = originalTitle;
+    printArea.setAttribute("aria-hidden", "true");
+  }, 500);
+}
+
+function tripPrintHtml(trip) {
+  const total = totalCost(trip.costs);
+  const aa = total / Math.max(1, Number(trip.attendees) || 1);
+  return `
+    <article class="print-document">
+      <header class="print-header">
+        <p>跟著 Cutefish 去旅行</p>
+        <h1>${escapeHtml(trip.title)}</h1>
+        <div>${escapeHtml(tripStatusText(trip.status))}｜${escapeHtml(dateText(trip.startDate, trip.endDate))}｜${escapeHtml(trip.location || "尚未填寫地點")}</div>
+      </header>
+      <section class="print-grid">
+        ${printBlock("集合資訊", gatheringText(trip))}
+        ${printBlock("交通", trip.transport)}
+        ${printBlock("住宿", trip.hotel)}
+        ${printBlock("景點", trip.attractions)}
+        ${printBlock("租車資訊", trip.carRental)}
+        ${printBlock("天氣預測", trip.weatherForecast)}
+        ${printBlock("行李清單建議", trip.luggageList)}
+        ${printBlock("行前檢查清單", checklistText(trip.checklist) || "尚未建立檢查清單。")}
+        ${printBlock("備註", trip.tripNotes)}
+        ${printBlock("旅遊後回顧", trip.review)}
+      </section>
+      <section class="print-section">
+        <h2>報名名單與付款</h2>
+        ${printParticipants(trip.participants)}
+      </section>
+      <section class="print-section">
+        <h2>每日行程時間表</h2>
+        <table>
+          <tbody>
+            ${(trip.schedule || []).map((row) => `<tr><th>${escapeHtml(`${row.day} ${row.time}`)}</th><td>${escapeHtml(row.activity || "")}</td></tr>`).join("")}
+          </tbody>
+        </table>
+      </section>
+      <section class="print-section">
+        <h2>費用明細與 AA 計算</h2>
+        <table>
+          <tbody>
+            ${(trip.costs || []).map((cost) => `<tr><td>${escapeHtml(`${cost.category}｜${cost.item}｜${costStatusText(cost.status || "estimated")}`)}</td><td>${escapeHtml(money(cost.amount))}</td></tr>`).join("")}
+          </tbody>
+        </table>
+        <p class="print-total">總計 ${escapeHtml(money(total))}，${trip.attendees || 1} 人 AA 每人 ${escapeHtml(money(aa))}</p>
+      </section>
+      <section class="print-section">
+        <h2>連結</h2>
+        ${printLinkList([
+          ["行前調查", trip.surveyUrl],
+          ["旅遊影片", trip.videoUrl],
+          ["旅遊相簿", trip.albumUrl],
+          ["Google Map", trip.mapUrl],
+          ...(trip.references || []).map((link, index) => [`參考網址 ${index + 1}`, link])
+        ])}
+      </section>
+    </article>
+  `;
+}
+
+function printBlock(title, text) {
+  return `<section><h2>${escapeHtml(title)}</h2><p>${escapeHtml(text || "尚未填寫。")}</p></section>`;
+}
+
+function printLinkList(items) {
+  const valid = items.filter(([, url]) => url);
+  if (!valid.length) return "<p>尚未提供。</p>";
+  return `<ul>${valid.map(([label, url]) => `<li><strong>${escapeHtml(label)}：</strong>${escapeHtml(url)}</li>`).join("")}</ul>`;
+}
+
+function safeFileName(value) {
+  return String(value || "travel").replace(/[\/:*?"<>|]/g, "-").slice(0, 60);
 }
 
 async function fetchTripWeather() {
@@ -867,11 +1188,77 @@ function weatherCodeText(code) {
   return labels[code] || "天氣狀況未明";
 }
 
+function normalizeNotices(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({ text: String(item.text || item || "").trim() })).filter((item) => item.text);
+}
+
+function parseNotices(text) {
+  return String(text || "").split("\n").map((line) => ({ text: line.trim() })).filter((item) => item.text);
+}
+
+function costStatusText(status = "estimated") {
+  const labels = { estimated: "預估", confirmed: "已確認", paid: "已付款" };
+  return labels[status] || status || "預估";
+}
+
+function costStatusKey(value = "estimated") {
+  const text = String(value).trim();
+  const map = { 預估: "estimated", 已確認: "confirmed", 已付款: "paid", estimated: "estimated", confirmed: "confirmed", paid: "paid" };
+  return map[text] || "estimated";
+}
+
+function normalizeCosts(costs) {
+  return (costs || []).map((cost) => ({ status: "estimated", ...cost, status: costStatusKey(cost.status || "estimated") }));
+}
+
+function normalizeParticipants(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((person) => ({
+    name: String(person.name || "").trim(),
+    paymentStatus: costStatusKey(person.paymentStatus || "estimated"),
+    amount: Number(person.amount) || 0,
+    note: String(person.note || "").trim()
+  })).filter((person) => person.name);
+}
+
+function participantsText(items) {
+  return normalizeParticipants(items).map((person) => `${person.name}｜${costStatusText(person.paymentStatus)}｜${person.amount || ""}｜${person.note || ""}`).join("\n");
+}
+
+function parseParticipants(text) {
+  return String(text || "").split("\n").map((line) => {
+    const [name = "", paymentStatus = "預估", amount = "", note = ""] = line.split("｜").map((part) => part.trim());
+    return { name, paymentStatus: costStatusKey(paymentStatus), amount: Number(String(amount).replaceAll(",", "")) || 0, note };
+  }).filter((person) => person.name);
+}
+
+function participantsHtml(items) {
+  const people = normalizeParticipants(items);
+  if (!people.length) return "<p>尚未建立報名名單。</p>";
+  return `<div class="participant-list">${people.map((person) => `<div><strong>${escapeHtml(person.name)}</strong><span>${escapeHtml(costStatusText(person.paymentStatus))}</span><span>${person.amount ? escapeHtml(money(person.amount)) : ""}</span><small>${escapeHtml(person.note)}</small></div>`).join("")}</div>`;
+}
+
+function printParticipants(items) {
+  const people = normalizeParticipants(items);
+  if (!people.length) return "<p>尚未建立報名名單。</p>";
+  return `<table><tbody>${people.map((person) => `<tr><th>${escapeHtml(person.name)}</th><td>${escapeHtml(costStatusText(person.paymentStatus))} ${person.amount ? escapeHtml(money(person.amount)) : ""} ${escapeHtml(person.note)}</td></tr>`).join("")}</tbody></table>`;
+}
+
 function parseCosts(text) {
   return text.split("\n").map((line) => {
-    const [category = "其他", item = "", amount = "0"] = line.split("｜").map((part) => part.trim());
-    return { category, item, amount: Number(amount.replaceAll(",", "")) || 0 };
+    const [category = "其他", item = "", amount = "0", status = "預估"] = line.split("｜").map((part) => part.trim());
+    return { category, item, amount: Number(amount.replaceAll(",", "")) || 0, status: costStatusKey(status) };
   }).filter((cost) => cost.item || cost.amount);
+}
+
+function parseChecklist(text) {
+  return String(text || "").split("\n").map((line) => {
+    const raw = line.trim();
+    const done = /^[✓✔xX]\s*/.test(raw);
+    const item = raw.replace(/^[✓✔xX]\s*/, "").trim();
+    return { item, done };
+  }).filter((item) => item.item);
 }
 
 function parseSchedule(text) {
@@ -888,6 +1275,7 @@ function openHeroForm() {
     ${input("title", "首頁標題", data.hero.title)}
     ${input("quote", "首頁文字", data.hero.quote)}
     ${input("image", "大圖網址或檔案路徑", data.hero.image)}
+    ${area("notices", "首頁小通知，每行一則", normalizeNotices(data.notices).map((notice) => notice.text).join("\n"))}
   `;
   const dialog = document.getElementById("adminDialog");
   dialog.dataset.formType = "hero";
@@ -903,6 +1291,7 @@ function saveHeroForm(form) {
     quote: formData.get("quote").trim(),
     image: formData.get("image").trim() || "assets/hero-travel.png"
   };
+  data.notices = parseNotices(formData.get("notices"));
   saveData(data);
 }
 
@@ -964,10 +1353,70 @@ function firebaseAuthMessage(error) {
   return messages[code] || `Firebase 帳號處理失敗：${code || "未知錯誤"}`;
 }
 
+function tripQrUrl(id) {
+  const url = new URL(location.href);
+  url.hash = `trip-${id}`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=${encodeURIComponent(url.toString())}`;
+}
+
+function renderAllTrips() {
+  currentView = "allTrips";
+  document.querySelector(".layout").classList.add("hidden");
+  document.getElementById("recommendationView").classList.add("hidden");
+  document.getElementById("allTripsView")?.classList.add("hidden");
+  document.getElementById("allTripsView").classList.remove("hidden");
+  const trips = [...loadData().trips].sort(byDate);
+  document.getElementById("allTripList").innerHTML = groupedTripsHtml(trips);
+}
+
+function groupedTripsHtml(trips) {
+  if (!trips.length) return `<article class="trip-card"><h3>尚未建立旅程</h3><p>管理員可以新增第一趟旅遊。</p></article>`;
+  const groups = trips.reduce((map, trip) => {
+    const month = (trip.startDate || "未排日期").slice(0, 7);
+    if (!map.has(month)) map.set(month, []);
+    map.get(month).push(trip);
+    return map;
+  }, new Map());
+  return [...groups.entries()].map(([month, items]) => `
+    <section class="trip-month-group">
+      <h3>${monthLabel(month)}</h3>
+      <div class="trip-list">${items.map((trip) => allTripCard(trip)).join("")}</div>
+    </section>
+  `).join("");
+}
+
+function allTripCard(trip) {
+  const total = totalCost(trip.costs || []);
+  return `
+    <article class="trip-card">
+      ${trip.coverImage ? `<img class="trip-cover" src="${trip.coverImage}" alt="${escapeAttr(trip.title)} 封面圖" />` : ""}
+      <div class="trip-card-main">
+        <time>${dateText(trip.startDate, trip.endDate)}</time>
+        <span class="tag status-tag status-${trip.status || "planning"}">${tripStatusText(trip.status)}</span>
+        <h3>${trip.title}</h3>
+        <p>${trip.location}</p>
+      </div>
+      <div class="tag-list"><span class="tag">總費用 ${money(total)}</span><span class="tag">${trip.attendees || 1} 人</span></div>
+      <div class="card-actions">
+        <button type="button" data-trip="${trip.id}">查看詳情</button>
+        ${trip.mapUrl ? `<a href="${trip.mapUrl}" target="_blank" rel="noreferrer">Google Map</a>` : ""}
+        <button class="admin-only" type="button" data-edit-trip="${trip.id}">編輯</button>
+      </div>
+    </article>
+  `;
+}
+
+function monthLabel(month) {
+  if (month === "未排日期") return month;
+  const [year, value] = month.split("-");
+  return `${year} 年 ${Number(value)} 月`;
+}
+
 function showHome() {
   currentView = "home";
   document.querySelector(".layout").classList.remove("hidden");
   document.getElementById("recommendationView").classList.add("hidden");
+  document.getElementById("allTripsView")?.classList.add("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -976,6 +1425,7 @@ function renderRecommendation(type) {
   const titleMap = { hotels: "飯店推薦", restaurants: "蔬食餐廳推薦", wishlist: "許願清單" };
   currentView = type;
   document.querySelector(".layout").classList.add("hidden");
+  document.getElementById("allTripsView")?.classList.add("hidden");
   document.getElementById("recommendationView").classList.remove("hidden");
   document.getElementById("recommendationTitle").textContent = titleMap[type];
   document.getElementById("recommendationGrid").innerHTML = data[type].map((item) => recommendationCard(type, item)).join("") ||
@@ -1008,20 +1458,30 @@ function recommendationCard(type, item) {
   return `
     <article class="recommend-card">
       <h3>${item.place}</h3>
-      <p>${item.month}</p>
+      <p>${item.month || "尚未填寫月份"}</p>
+      <div class="tag-list">
+        <span class="tag priority-tag priority-${item.priority || "medium"}">${wishPriorityText(item.priority)}</span>
+        <span class="tag">${Number(item.wantCount) || 0} 人想去</span>
+        ${item.bestSeason ? `<span class="tag">最佳季節 ${item.bestSeason}</span>` : ""}
+        ${Number(item.budget) ? `<span class="tag">預估 ${money(item.budget)}</span>` : ""}
+        <span class="tag">調查 ${surveyStatusText(item.surveyStatus)}</span>
+        ${wishTags(item.tags).map((tag) => `<span class="tag wish-tag">${tag}</span>`).join("")}
+      </div>
       ${item.surveyUrl ? `<p><a href="${item.surveyUrl}" target="_blank" rel="noreferrer">意願調查</a></p>` : "<p>尚未提供意願調查</p>"}
+      ${wishLinkList(item.inspirationLinks)}
       <p>${item.note || ""}</p>
       ${recommendActions(type, item.id)}
     </article>`;
 }
 
 function recommendActions(type, id) {
-  return `<div class="card-actions"><button class="admin-only" type="button" data-edit-rec="${type}:${id}">編輯</button><button class="admin-only" type="button" data-delete-rec="${type}:${id}">刪除</button></div>`;
+  const createTrip = type === "wishlist" ? `<button class="admin-only" type="button" data-wish-trip="${id}">建立旅程</button>` : "";
+  return `<div class="card-actions">${createTrip}<button class="admin-only" type="button" data-edit-rec="${type}:${id}">編輯</button><button class="admin-only" type="button" data-delete-rec="${type}:${id}">刪除</button></div>`;
 }
 
 function openRecommendationForm(type, id) {
   const data = loadData();
-  const item = data[type].find((entry) => entry.id === id) || { id: crypto.randomUUID(), month: "", city: "", address: "", mapUrl: "", surveyUrl: "", note: "" };
+  const item = data[type].find((entry) => entry.id === id) || { id: crypto.randomUUID(), month: "", city: "", address: "", mapUrl: "", priority: "medium", tags: "", surveyStatus: "notSent", inspirationLinks: [], wantCount: 0, bestSeason: "", budget: 0, surveyUrl: "", note: "" };
   document.getElementById("adminDialogTitle").textContent = id ? "編輯項目" : "新增項目";
   document.getElementById("adminFields").innerHTML = recommendationFields(type, item);
   const dialog = document.getElementById("adminDialog");
@@ -1037,7 +1497,40 @@ function recommendationFields(type, item) {
   if (type === "restaurants") {
     return `${input("name", "餐廳名稱", item.name || "")}${input("city", "所在城市", item.city || "")}${input("address", "地址", item.address || "")}${input("mapUrl", "Google Map 連結", item.mapUrl || "", "url")}${ratingInputs(["price:價位", "taste:美味", "location:地點", "environment:用餐環境"], item)}${area("note", "備註", item.note || "")}`;
   }
-  return `${input("place", "想去的地點", item.place || "")}${input("month", "想去月份", item.month || "")}${input("surveyUrl", "意願調查 Google Form", item.surveyUrl || "", "url")}${area("note", "備註", item.note || "")}`;
+  return `${input("place", "想去的地點", item.place || "")}${input("month", "想去月份", item.month || "")}${wishPrioritySelect(item.priority)}${input("tags", "分類標籤，逗號分隔", item.tags || "")}${surveyStatusSelect(item.surveyStatus)}${input("wantCount", "想去人數", item.wantCount || 0, "number")}${input("bestSeason", "最佳季節", item.bestSeason || "")}${input("budget", "預估預算 / 每人", item.budget || 0, "number")}${input("surveyUrl", "意願調查 Google Form", item.surveyUrl || "", "url")}${area("inspirationLinks", "靈感 / 參考連結，每行一個", normalizeLinks(item.inspirationLinks).join("\n"))}${area("note", "備註", item.note || "")}`;
+}
+
+function wishPrioritySelect(value = "medium") {
+  const options = { high: "必去", medium: "可安排", low: "先收藏" };
+  return `<label>優先順序<select name="priority">${Object.entries(options).map(([key, label]) => `<option value="${key}" ${key === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
+}
+
+function surveyStatusSelect(value = "notSent") {
+  const options = { notSent: "未發送", sent: "已發送", closed: "已截止" };
+  return `<label>意願調查狀態<select name="surveyStatus">${Object.entries(options).map(([key, label]) => `<option value="${key}" ${key === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>`;
+}
+
+function wishPriorityText(value = "medium") {
+  return { high: "必去", medium: "可安排", low: "先收藏" }[value] || "可安排";
+}
+
+function surveyStatusText(value = "notSent") {
+  return { notSent: "未發送", sent: "已發送", closed: "已截止" }[value] || "未發送";
+}
+
+function wishTags(value = "") {
+  return String(value || "").split(/[,，]/).map((tag) => tag.trim()).filter(Boolean);
+}
+
+function normalizeLinks(value) {
+  if (Array.isArray(value)) return value.map((link) => String(link).trim()).filter(Boolean);
+  return String(value || "").split("\n").map((link) => link.trim()).filter(Boolean);
+}
+
+function wishLinkList(links) {
+  const valid = normalizeLinks(links);
+  if (!valid.length) return "";
+  return `<ul>${valid.map((link, index) => `<li><a href="${link}" target="_blank" rel="noreferrer">靈感連結 ${index + 1}</a></li>`).join("")}</ul>`;
 }
 
 function ratingInputs(fields, item) {
@@ -1052,7 +1545,8 @@ function saveRecommendationForm(form, type, id) {
   const formData = new FormData(form);
   const item = Object.fromEntries(formData.entries());
   item.id = id;
-  ["price", "comfort", "breakfast", "location", "taste", "environment"].forEach((key) => {
+  if (type === "wishlist") item.inspirationLinks = normalizeLinks(formData.get("inspirationLinks"));
+  ["price", "comfort", "breakfast", "location", "taste", "environment", "wantCount", "budget"].forEach((key) => {
     if (item[key]) item[key] = Number(item[key]);
   });
   const index = data[type].findIndex((entry) => entry.id === id);
@@ -1069,6 +1563,53 @@ function deleteTrip(id) {
   render();
 }
 
+function createTripFromWish(id) {
+  const data = loadData();
+  const wish = data.wishlist.find((item) => item.id === id);
+  if (!wish) return;
+  const trip = {
+    id: crypto.randomUUID(),
+    title: `${wish.place} 小旅行`,
+    startDate: "",
+    endDate: "",
+    location: wish.place || "",
+    mapUrl: "",
+    coverImage: "",
+    status: "planning",
+    transport: "",
+    hotel: "",
+    attractions: wish.note || "",
+    carRental: "",
+    weatherForecast: "",
+    luggageList: "",
+    tripNotes: [wish.month ? `想去月份：${wish.month}` : "", wish.bestSeason ? `最佳季節：${wish.bestSeason}` : "", Number(wish.budget) ? `預估預算：${money(wish.budget)} / 人` : "", wish.surveyUrl ? `意願調查：${wish.surveyUrl}` : ""].filter(Boolean).join("\n"),
+    review: "",
+    participants: [],
+    checklist: [
+      { item: "確認旅遊日期", done: false },
+      { item: "確認同行人數", done: false },
+      { item: "安排交通與住宿", done: false }
+    ],
+    gatherTime: "",
+    gatherPlace: "",
+    contactName: "",
+    contactPhone: "",
+    surveyUrl: wish.surveyUrl || "",
+    videoUrl: "",
+    albumUrl: "",
+    references: normalizeLinks(wish.inspirationLinks),
+    costs: Number(wish.budget) ? [{ category: "預算", item: "每人預估", amount: Number(wish.budget), status: "estimated" }] : [],
+    attendees: Number(wish.wantCount) || 1,
+    schedule: [{ day: "Day 1", time: "09:00", activity: "待規劃" }]
+  };
+  data.trips.push(trip);
+  saveData(data);
+  alert("已從許願清單建立一筆規劃中的旅程。接著可以到旅程列表編輯日期與細節。");
+  showHome();
+  render();
+  openTripForm(trip.id);
+}
+
 function deleteRecommendation(type, id) {
   if (!confirm("確定要刪除這個項目嗎？")) return;
   const data = loadData();
@@ -1083,13 +1624,15 @@ document.addEventListener("click", (event) => {
   if (target.classList.contains("close") && target.id !== "closeTripDialog") {
     target.closest("dialog")?.close();
   }
-  if (target.id === "adminButton") openLogin();
-  if (target.id === "editHeroButton") openHeroForm();
+  if (target.id === "adminButton" || target.id === "mobileAdminButton") openLogin();
+  if (target.id === "editHeroButton" || target.id === "editHeroMainButton") openHeroForm();
   if (target.id === "shareButton") {
     document.getElementById("shareNote").textContent = "";
     document.getElementById("shareDialog").showModal();
   }
-  if (target.id === "newTripButton") openTripForm();
+  if (target.id === "newTripButton" || target.id === "newTripFromAllButton") openTripForm();
+  if (target.id === "allTripsButton" || target.id === "mobileAllTripsButton") renderAllTrips();
+  if (target.id === "closeAllTrips") showHome();
   if (target.id === "prevMonth") {
     calendarDate.setMonth(calendarDate.getMonth() - 1);
     renderCalendar(loadData());
@@ -1101,14 +1644,19 @@ document.addEventListener("click", (event) => {
   if (target.dataset.trip) showTrip(target.dataset.trip);
   if (target.dataset.editTrip) openTripForm(target.dataset.editTrip);
   if (target.dataset.deleteTrip) deleteTrip(target.dataset.deleteTrip);
+  if (target.dataset.lineTrip) copyLineAnnouncement(target.dataset.lineTrip);
   if (target.dataset.copyTrip) copyTripSummary(target.dataset.copyTrip);
+  if (target.dataset.printTrip) exportTripPdf(target.dataset.printTrip);
   if (target.dataset.view) renderRecommendation(target.dataset.view);
-  if (target.id === "closeRecommendation" || target.id === "heroHomeButton") showHome();
+  if (target.id === "closeRecommendation" || target.id === "heroHomeButton" || target.dataset.mobileHome !== undefined) showHome();
+  if (target.dataset.mobileCalendar !== undefined) document.querySelector(".calendar-panel")?.scrollIntoView({ behavior: "smooth" });
+  if (target.dataset.mobileTrips !== undefined) document.getElementById("tripsSection")?.scrollIntoView({ behavior: "smooth" });
   if (target.id === "addRecommendation") openRecommendationForm(currentView);
   if (target.dataset.editRec) {
     const [type, id] = target.dataset.editRec.split(":");
     openRecommendationForm(type, id);
   }
+  if (target.dataset.wishTrip) createTripFromWish(target.dataset.wishTrip);
   if (target.dataset.deleteRec) {
     const [type, id] = target.dataset.deleteRec.split(":");
     deleteRecommendation(type, id);
@@ -1142,6 +1690,17 @@ document.getElementById("adminForm").addEventListener("submit", async (event) =>
   render();
 });
 
+document.getElementById("tripSearch")?.addEventListener("input", (event) => {
+  tripSearchQuery = event.target.value;
+  renderTrips(loadData());
+});
+
+document.getElementById("tripStatusFilter")?.addEventListener("change", (event) => {
+  tripStatusFilter = event.target.value;
+  renderTrips(loadData());
+});
+
 setInterval(() => renderCountdown(loadData()), 1000);
 render();
 initFirebase();
+openTripFromHash();
